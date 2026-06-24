@@ -6,7 +6,7 @@ import os from 'node:os'
 import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 
-import {filterEntries, findMergeTargets, parseRepo, shouldIncludePath} from '#src/main.ts'
+import {Downloader, filterEntries, findMergeTargets, parseRepo, shouldIncludePath} from '#src/main.ts'
 
 const baseFilterOptions: FilterOptions = {
   omitFile: [],
@@ -104,6 +104,25 @@ test('forced paths bypass default skips but not explicit omit filters', () => {
     ...baseFilterOptions,
     omitFile: ['LICENSE'],
   }, true, 'LICENSE').include).toBe(false)
+})
+test('Downloader folder templates support base folders and source variables', async () => {
+  const baseFolder = await makeTempFolder()
+  try {
+    const downloader = new Downloader({
+      baseFolder,
+      folder: '{{sourceId}}/{{sourceDomain}}/{{owner}}/{{repo}}/{{revision}}',
+      partialFolder: '',
+      revision: 'abc123',
+      url: 'acme/widgets',
+    })
+    ;(downloader as unknown as {listRepositoryEntries: () => Promise<[]>}).listRepositoryEntries = async () => []
+    const dump = await downloader.dump()
+    expect(dump.context.baseFolder).toBe(baseFolder)
+    expect(dump.context.folder).toBe(pathUtil.resolve(baseFolder, 'hugging_face/huggingface.co/acme/widgets/abc123'))
+    expect(dump.context.partialFolder).toBe('')
+  } finally {
+    await fs.remove(baseFolder)
+  }
 })
 test('findMergeTargets reads safetensors index files', async () => {
   const folder = await makeTempFolder()

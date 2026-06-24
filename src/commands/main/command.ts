@@ -5,6 +5,10 @@ import {run} from './run.ts'
 const command = defineCommand({
   description: 'run a Hugging Face download',
   flags: {
+    baseFolder: {
+      type: String,
+      description: 'base folder template for relative target folders; defaults to the current working directory',
+    },
     dump: {
       type: Boolean,
       description: 'perform a dry run and print a JSON object consisting of context and diagnostics',
@@ -15,12 +19,7 @@ const command = defineCommand({
     },
     folder: {
       default: '{{owner}}/{{repo}}',
-      description: 'Handlebars-like target folder template (variables: owner, repo, revision, home, temp)',
-      type: String,
-    },
-    jobs: {
-      default: '4',
-      description: 'maximum amount of concurrent file downloads',
+      description: 'Handlebars-like target folder template (variables: owner, repo, revision, sourceId, sourceDomain, home, temp)',
       type: String,
     },
     mergeSplits: {

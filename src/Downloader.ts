@@ -10,18 +10,18 @@ import chalk from 'chalk'
 import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 import {hashFile} from 'hasha'
-import pLimit from 'p-limit'
 
 import {filterEntries} from './lib/filter.ts'
 import {formatBytes, formatDuration, renderTemplate} from './lib/format.ts'
 import {findMergeTargets, mergeSplits} from './lib/mergeSplits.ts'
 import {parseRepo, repoDisplayName} from './lib/parseRepo.ts'
 
+const sourceDomain = 'huggingface.co'
+const sourceId = 'hugging_face'
 const defaultOptions = {
   dump: false,
   fancy: false,
   folder: '{{owner}}/{{repo}}',
-  jobs: 4,
   mergeSplits: false,
   omitFile: [],
   omitFolder: [],
@@ -90,20 +90,21 @@ export class Downloader {
     await this.ensureDirectories(session)
     const downloads = session.plannedActions.filter(action => action.kind === 'download')
     this.startProgress(downloads)
-    const limit = pLimit(Math.max(1, this.options.jobs))
-    const records = await Promise.all(session.plannedActions.map(action => {
+    const records: Array<DownloadRecord> = []
+    for (const action of session.plannedActions) {
       if (action.kind === 'skip') {
         this.progress.downloadedFiles++
-        return {
+        records.push({
           path: action.file.path,
           reason: action.reason,
           size: this.entrySize(action.file),
           status: 'skipped',
           targetPath: action.targetPath,
-        } satisfies DownloadRecord
+        })
+        continue
       }
-      return limit(() => this.downloadAction(action, session))
-    }))
+      records.push(await this.downloadAction(action, session))
+    }
     if (session.partialFolder) {
       await fs.remove(session.partialFolder)
     }
@@ -224,6 +225,7 @@ export class Downloader {
     const downloadableActions = session.plannedActions.filter(action => action.kind === 'download')
     return {
       context: {
+        baseFolder: this.options.baseFolder,
         folder: session.outputFolder,
         partialFolder: session.partialFolder,
         repo: session.repo,
@@ -269,6 +271,8 @@ export class Downloader {
       owner: repo.owner,
       repo: repo.repoName,
       revision,
+      sourceDomain,
+      sourceId,
       temp: os.tmpdir(),
     }
   }
@@ -351,7 +355,7 @@ export class Downloader {
       revision,
     }
     const context = this.makeTemplateContext(repo, revision)
-    const outputFolder = pathUtil.resolve(renderTemplate(this.options.folder, context))
+    const outputFolder = this.resolveOutputFolder(context)
     const partialFolder = this.options.partialFolder ? pathUtil.resolve(renderTemplate(this.options.partialFolder, {
       ...context,
       outputFolder,
@@ -393,6 +397,15 @@ export class Downloader {
       return commit.oid
     }
     throw new Error(`Could not resolve latest revision for ${repoDisplayName(repo)}.`)
+  }
+
+  private resolveOutputFolder(context: TemplateContext) {
+    const folder = renderTemplate(this.options.folder, context)
+    if (!this.options.baseFolder) {
+      return pathUtil.resolve(folder)
+    }
+    const baseFolder = pathUtil.resolve(renderTemplate(this.options.baseFolder, context))
+    return pathUtil.resolve(baseFolder, folder)
   }
 
   private startProgress(actions: Array<PlannedAction>) {

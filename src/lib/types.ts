@@ -20,6 +20,8 @@ export type TemplateContext = {
   owner: string
   repo: string
   revision: string
+  sourceDomain: string
+  sourceId: string
   temp: string
 }
 
@@ -38,10 +40,10 @@ export type FilterOptions = {
 }
 
 export type DownloaderOptions = FilterOptions & {
+  baseFolder?: string
   dump: boolean
   fancy: boolean
   folder: string
-  jobs: number
   mergeSplits: boolean
   overwriteStrategy: OverwriteStrategy
   partialFolder: string
@@ -98,6 +100,7 @@ export type MergeRecord = MergeTarget & {
 
 export type DumpOutput = {
   context: {
+    baseFolder?: string
     folder: string
     partialFolder: string
     repo: ParsedRepo

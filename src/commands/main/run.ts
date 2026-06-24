@@ -20,18 +20,6 @@ const stringFlag = (value: unknown) => {
 const booleanFlag = (value: unknown) => {
   return value === true
 }
-const numberFlag = (value: unknown, fallback: number) => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === 'string' && value) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-  return fallback
-}
 const overwriteStrategyFlag = (value: unknown): OverwriteStrategy => {
   const strategy = stringFlag(value) || 'mismatch'
   if (!overwriteStrategies.has(strategy)) {
@@ -48,10 +36,10 @@ export const run = async (context: CommandHandlerContext<typeof command>) => {
     throw new Error('No Hugging Face repository specified. Pass a slug/URL as the positional argument or via --url.')
   }
   const options: DownloaderOptions = {
+    baseFolder: stringFlag(flags.baseFolder),
     dump: booleanFlag(flags.dump),
     fancy: booleanFlag(flags.fancy),
     folder: stringFlag(flags.folder) || '{{owner}}/{{repo}}',
-    jobs: numberFlag(flags.jobs, 4),
     mergeSplits: booleanFlag(flags.mergeSplits),
     omitFile: arrayFlag(flags.omitFile),
     omitFolder: arrayFlag(flags.omitFolder),
