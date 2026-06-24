@@ -1,6 +1,6 @@
 # savetensors
 
-Gitless Hugging Face repository downloader for Bun. It downloads model, dataset, space, bucket or kernel repositories through the Hugging Face Hub API without `git`/Git LFS, supports precise include/exclude filters and can merge sharded `.safetensors` checkpoints through `uv` + Python.
+Gitless Hugging Face repository downloader for Bun. It downloads model, dataset, space, bucket or kernel repositories through the Hugging Face Hub API without `git`/Git LFS, supports precise include/exclude filters and can merge sharded `.safetensors` checkpoints with a streaming container rewrite.
 
 ```bash
 savetensors Qwen/Qwen3.5-0.8B

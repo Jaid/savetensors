@@ -7,7 +7,7 @@ import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 
 import {collectSourceUrls} from '#src/commands/main/run.ts'
-import {Downloader, filterEntries, findMergeTargets, parseRepo, shouldIncludePath} from '#src/main.ts'
+import {Downloader, filterEntries, findMergeTargets, mergeTarget, parseRepo, shouldIncludePath} from '#src/main.ts'
 
 const baseFilterOptions: FilterOptions = {
   omitFile: [],
@@ -24,6 +24,46 @@ const baseFilterOptions: FilterOptions = {
 }
 const makeTempFolder = async () => {
   return fs.mkdtemp(pathUtil.join(os.tmpdir(), 'savetensors-test-'))
+}
+const metadataKey = '__metadata__'
+const writeFakeSafetensors = async (file: string, tensors: Record<string, Buffer>, metadata?: Record<string, string>) => {
+  const header: Record<string, unknown> = {}
+  if (metadata) {
+    header[metadataKey] = metadata
+  }
+  let offset = 0
+  for (const [name, data] of Object.entries(tensors)) {
+    header[name] = {
+      data_offsets: [offset, offset + data.length],
+      dtype: 'U8',
+      shape: [data.length],
+    }
+    offset += data.length
+  }
+  const headerJson = JSON.stringify(header)
+  const paddingLength = (8 - Buffer.byteLength(headerJson) % 8) % 8
+  const headerBuffer = Buffer.from(`${headerJson}${' '.repeat(paddingLength)}`)
+  const lengthBuffer = Buffer.allocUnsafe(8)
+  lengthBuffer.writeBigUInt64LE(BigInt(headerBuffer.length))
+  await fs.outputFile(file, Buffer.concat([lengthBuffer, headerBuffer, ...Object.values(tensors)]))
+}
+const readFakeSafetensors = async (file: string) => {
+  const buffer = await fs.readFile(file)
+  const headerLength = Number(buffer.readBigUInt64LE())
+  const header = JSON.parse(buffer.subarray(8, 8 + headerLength).toString('utf8')) as Record<string, Record<string, string> | {data_offsets: [number, number]}>
+  const dataStart = 8 + headerLength
+  const tensors: Record<string, string> = {}
+  for (const [name, entry] of Object.entries(header)) {
+    if (name === metadataKey) {
+      continue
+    }
+    const [start, end] = (entry as {data_offsets: [number, number]}).data_offsets
+    tensors[name] = buffer.subarray(dataStart + start, dataStart + end).toString('utf8')
+  }
+  return {
+    header,
+    tensors,
+  }
 }
 test('parseRepo parses model slugs', () => {
   expect(parseRepo('Qwen/Qwen3.5-0.8B')).toMatchObject({
@@ -200,6 +240,49 @@ test('findMergeTargets falls back to shard file names without an index', async (
     const targets = await findMergeTargets(folder)
     expect(targets).toHaveLength(1)
     expect(targets[0]?.outputFile).toBe(pathUtil.join(folder, 'foo.safetensors'))
+  } finally {
+    await fs.remove(folder)
+  }
+})
+test('mergeTarget merges safetensors shards without materializing tensors', async () => {
+  const folder = await makeTempFolder()
+  try {
+    const firstShard = pathUtil.join(folder, 'model-00001-of-00002.safetensors')
+    const secondShard = pathUtil.join(folder, 'model-00002-of-00002.safetensors')
+    const indexFile = pathUtil.join(folder, 'model.safetensors.index.json')
+    const outputFile = pathUtil.join(folder, 'model.safetensors')
+    await writeFakeSafetensors(firstShard, {
+      alpha: Buffer.from('abc'),
+      beta: Buffer.from('defg'),
+    }, {
+      format: 'pt',
+    })
+    await writeFakeSafetensors(secondShard, {
+      gamma: Buffer.from('hijkl'),
+    })
+    await fs.outputJson(indexFile, {
+      weight_map: {
+        alpha: pathUtil.basename(firstShard),
+        beta: pathUtil.basename(firstShard),
+        gamma: pathUtil.basename(secondShard),
+      },
+    })
+    const record = await mergeTarget({
+      indexFile,
+      outputFile,
+      shardFiles: [firstShard, secondShard],
+    })
+    expect(record.shardFiles).toEqual([firstShard, secondShard])
+    await expect(fs.pathExists(firstShard)).resolves.toBe(false)
+    await expect(fs.pathExists(secondShard)).resolves.toBe(false)
+    await expect(fs.pathExists(indexFile)).resolves.toBe(false)
+    const merged = await readFakeSafetensors(outputFile)
+    expect(merged.header[metadataKey]).toEqual({format: 'pt'})
+    expect(merged.tensors).toEqual({
+      alpha: 'abc',
+      beta: 'defg',
+      gamma: 'hijkl',
+    })
   } finally {
     await fs.remove(folder)
   }

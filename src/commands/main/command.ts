@@ -28,7 +28,7 @@ const command = defineCommand({
     },
     mergeSplits: {
       type: Boolean,
-      description: 'merge split .safetensors shards via uv + Python; successful merges delete the original split files and index file',
+      description: 'merge split .safetensors shards with a streaming container rewrite; successful merges delete the original split files and index file',
     },
     omitFile: {
       type: [String],

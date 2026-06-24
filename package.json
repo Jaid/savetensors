@@ -2,7 +2,7 @@
   "name": "savetensors",
   "version": "0.1.0",
   "type": "module",
-  "description": "Gitless Hugging Face repository downloader with safetensors shard merging.",
+  "description": "gitless downloader for Hugging Face repositories",
   "funding": "https://github.com/sponsors/Jaid",
   "license": "MIT",
   "repository": {
