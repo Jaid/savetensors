@@ -6,6 +6,7 @@ import os from 'node:os'
 import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 
+import {collectSourceUrls} from '#src/commands/main/run.ts'
 import {Downloader, filterEntries, findMergeTargets, parseRepo, shouldIncludePath} from '#src/main.ts'
 
 const baseFilterOptions: FilterOptions = {
@@ -123,6 +124,54 @@ test('Downloader folder templates support base folders and source variables', as
   } finally {
     await fs.remove(baseFolder)
   }
+})
+test('Downloader eagerly skips existing target folders before listing', async () => {
+  const baseFolder = await makeTempFolder()
+  try {
+    await fs.ensureDir(pathUtil.join(baseFolder, 'target'))
+    const downloader = new Downloader({
+      baseFolder,
+      eagerSkip: true,
+      folder: 'target',
+      partialFolder: '',
+      url: 'acme/widgets',
+    })
+    ;(downloader as unknown as {resolveLatestRevision: () => Promise<string>}).resolveLatestRevision = async () => {
+      throw new Error('latest revision should not be resolved')
+    }
+    ;(downloader as unknown as {listRepositoryEntries: () => Promise<[]>}).listRepositoryEntries = async () => {
+      throw new Error('repository should not be listed')
+    }
+    const dump = await downloader.dump()
+    expect(dump.context.folder).toBe(pathUtil.resolve(baseFolder, 'target'))
+    expect(dump.diagnostics.eagerSkipped).toBe(true)
+    expect(dump.diagnostics.listed.total).toBe(0)
+    expect(dump.diagnostics.plannedActions).toEqual([])
+  } finally {
+    await fs.remove(baseFolder)
+  }
+})
+test('collectSourceUrls preserves sequential positional and source-flag order', () => {
+  expect(collectSourceUrls([
+    '--url',
+    'alpha/one',
+    'beta/two',
+    '--repo=gamma/three',
+    '--folder',
+    'target',
+    'delta/four',
+    '--omit-pattern',
+    '-*.bin',
+    'epsilon/five',
+    '--url:https://huggingface.co/zeta/six',
+  ])).toEqual([
+    'alpha/one',
+    'beta/two',
+    'gamma/three',
+    'delta/four',
+    'epsilon/five',
+    'https://huggingface.co/zeta/six',
+  ])
 })
 test('findMergeTargets reads safetensors index files', async () => {
   const folder = await makeTempFolder()

@@ -13,6 +13,10 @@ const command = defineCommand({
       type: Boolean,
       description: 'perform a dry run and print a JSON object consisting of context and diagnostics',
     },
+    eagerSkip: {
+      type: Boolean,
+      description: 'skip the repository before listing/downloading when the resolved target folder already exists',
+    },
     fancy: {
       type: Boolean,
       description: 'enables terminal fanciness: ANSI progress, process.title percentage and OSC 9;4 terminal progress',
@@ -85,7 +89,7 @@ const command = defineCommand({
       description: 'alias for --revision',
     },
     repo: {
-      type: String,
+      type: [String],
       description: 'alias for --url',
     },
     revision: {
@@ -97,12 +101,12 @@ const command = defineCommand({
       description: 'Hugging Face access token; HF_TOKEN is used when omitted',
     },
     url: {
-      type: String,
+      type: [String],
       description: 'remote repository as owner/name, typed slug like datasets/owner/name or a huggingface.co URL',
     },
   },
   name: '',
-  parameters: ['[url]'],
+  parameters: ['[url...]'],
 // eslint-disable-next-line typescript/no-misused-promises
 }, context => run(context))
 

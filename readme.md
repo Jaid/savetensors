@@ -24,10 +24,12 @@ The package also exposes an `hf-grab` binary alias for compatibility with the fi
 
 - Slug and URL parsing for models plus typed `datasets/`, `spaces/`, `buckets/` and `kernels/` repositories.
 - `--revision` and `--ref`, with default resolution to the latest commit on the default branch.
+- Multiple positional repositories, `--url` flags and `--repo` flags in one invocation, processed sequentially in CLI order.
 - `--base-folder`, `--folder` and `--partial-folder` templates with `{{owner}}`, `{{repo}}`, `{{revision}}`, `{{sourceId}}`, `{{sourceDomain}}`, `{{home}}` and `{{temp}}`; `--partial-folder` additionally supports `{{outputFolder}}`.
 - `--only-*` and `--omit-*` filters for files, folders, stems, suffixes and Picomatch patterns.
 - Conservative default skips for `.gitattributes`, Git marker files and license/notice boilerplate, disabled by `--pedantic` or bypassed by explicit `--only-*` selection.
 - Atomic-ish sequential partial downloads and overwrite strategies: `mismatch`, `wipe`, `skip`, `error` and `keep`.
+- `--eager-skip` to skip a repository before remote listing when its resolved target folder already exists.
 - `--dump` JSON diagnostics for dry runs.
 - `--merge-splits` safetensors merging based on `*.safetensors.index.json` plus a shard-name fallback.
 

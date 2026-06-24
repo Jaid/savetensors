@@ -1,3 +1,8 @@
 import {makeEslintConfig} from 'eslint-config-jaid'
 
-export default makeEslintConfig()
+export default [
+  {
+    ignores: ['private/'],
+  },
+  ...makeEslintConfig(),
+]

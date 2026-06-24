@@ -42,6 +42,7 @@ export type FilterOptions = {
 export type DownloaderOptions = FilterOptions & {
   baseFolder?: string
   dump: boolean
+  eagerSkip: boolean
   fancy: boolean
   folder: string
   mergeSplits: boolean
@@ -109,6 +110,7 @@ export type DumpOutput = {
   diagnostics: {
     actionCounts: Record<PlannedActionKind, number>
     directories: Array<string>
+    eagerSkipped: boolean
     excluded: Array<{path: string
       reason: string
       type: ListFileEntry['type']}>

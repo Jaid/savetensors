@@ -20,6 +20,7 @@ const sourceDomain = 'huggingface.co'
 const sourceId = 'hugging_face'
 const defaultOptions = {
   dump: false,
+  eagerSkip: false,
   fancy: false,
   folder: '{{owner}}/{{repo}}',
   mergeSplits: false,
@@ -39,6 +40,7 @@ const defaultOptions = {
 } satisfies Omit<DownloaderOptions, 'url'>
 
 type PreparedSession = {
+  eagerSkipped: boolean
   entries: Array<ListFileEntry>
   filterResult: ReturnType<typeof filterEntries>
   outputFolder: string
@@ -82,6 +84,13 @@ export class Downloader {
   }
 
   private async download(session: PreparedSession) {
+    if (session.eagerSkipped) {
+      console.log(`${chalk.gray('↷')} ${session.outputFolder} ${chalk.gray('(target folder exists; eager skip)')}`)
+      return {
+        downloads: [],
+        merges: [],
+      }
+    }
     if (this.options.overwriteStrategy === 'wipe') {
       await fs.emptyDir(session.outputFolder)
     } else {
@@ -221,7 +230,7 @@ export class Downloader {
     const listedFiles = session.entries.filter(entry => entry.type === 'file')
     const listedDirectories = session.entries.filter(entry => entry.type === 'directory')
     const listedUnknown = session.entries.filter(entry => entry.type === 'unknown')
-    const mergeTargets = session.outputFolder ? await findMergeTargets(session.outputFolder).catch(() => []) : []
+    const mergeTargets = session.eagerSkipped || !session.outputFolder ? [] : await findMergeTargets(session.outputFolder).catch(() => [])
     const downloadableActions = session.plannedActions.filter(action => action.kind === 'download')
     return {
       context: {
@@ -237,6 +246,7 @@ export class Downloader {
           skip: session.plannedActions.length - downloadableActions.length,
         },
         directories: session.filterResult.includedDirectories.map(directory => directory.path).toSorted((left, right) => left.localeCompare(right)),
+        eagerSkipped: session.eagerSkipped,
         excluded: session.filterResult.excluded.map(({entry, reason}) => ({
           path: entry.path,
           reason,
@@ -265,6 +275,22 @@ export class Downloader {
     }
   }
 
+  private makeEagerSkippedSession(repo: ParsedRepo, outputFolder: string, partialFolder: string): PreparedSession {
+    return {
+      eagerSkipped: true,
+      entries: [],
+      filterResult: {
+        excluded: [],
+        files: [],
+        includedDirectories: [],
+      },
+      outputFolder,
+      partialFolder,
+      plannedActions: [],
+      repo,
+    }
+  }
+
   private makeTemplateContext(repo: ParsedRepo, revision: string): TemplateContext {
     return {
       home: os.homedir(),
@@ -289,6 +315,10 @@ export class Downloader {
       console.log(`${chalk.green('✓')} merged ${mergeRecord.shardFiles.length} shards → ${pathUtil.relative(outputFolder, mergeRecord.outputFile)} ${chalk.gray(formatDuration(mergeRecord.durationMs))}`)
     }
     return mergeRecords
+  }
+
+  private outputFolderTemplateNeedsRevision() {
+    return [this.options.baseFolder, this.options.folder].some(template => Boolean(template && /\{\{\s*revision\s*\}\}/u.test(template)))
   }
 
   private async planDownloads(files: Array<RemoteFile>, outputFolder: string, readOnly = false) {
@@ -349,21 +379,34 @@ export class Downloader {
 
   private async prepare(): Promise<PreparedSession> {
     const parsedRepo = parseRepo(this.options.url)
-    const revision = this.options.revision || parsedRepo.revision || await this.resolveLatestRevision(parsedRepo)
+    const explicitRevision = this.options.revision || parsedRepo.revision
+    if (this.options.eagerSkip && !explicitRevision && !this.outputFolderTemplateNeedsRevision()) {
+      const repo = {
+        ...parsedRepo,
+        revision: undefined,
+      }
+      const context = this.makeTemplateContext(repo, '')
+      const outputFolder = this.resolveOutputFolder(context)
+      if (await fs.pathExists(outputFolder)) {
+        return this.makeEagerSkippedSession(repo, outputFolder, this.resolvePartialFolder(context, outputFolder))
+      }
+    }
+    const revision = explicitRevision || await this.resolveLatestRevision(parsedRepo)
     const repo = {
       ...parsedRepo,
       revision,
     }
     const context = this.makeTemplateContext(repo, revision)
     const outputFolder = this.resolveOutputFolder(context)
-    const partialFolder = this.options.partialFolder ? pathUtil.resolve(renderTemplate(this.options.partialFolder, {
-      ...context,
-      outputFolder,
-    })) : ''
+    const partialFolder = this.resolvePartialFolder(context, outputFolder)
+    if (this.options.eagerSkip && await fs.pathExists(outputFolder)) {
+      return this.makeEagerSkippedSession(repo, outputFolder, partialFolder)
+    }
     const entries = await this.listRepositoryEntries(repo)
     const filterResult = filterEntries(entries, this.options, repo.forcedPath)
     const plannedActions = await this.planDownloads(filterResult.files, outputFolder, this.options.dump)
     return {
+      eagerSkipped: false,
       entries,
       filterResult,
       outputFolder,
@@ -406,6 +449,16 @@ export class Downloader {
     }
     const baseFolder = pathUtil.resolve(renderTemplate(this.options.baseFolder, context))
     return pathUtil.resolve(baseFolder, folder)
+  }
+
+  private resolvePartialFolder(context: TemplateContext, outputFolder: string) {
+    if (!this.options.partialFolder) {
+      return ''
+    }
+    return pathUtil.resolve(renderTemplate(this.options.partialFolder, {
+      ...context,
+      outputFolder,
+    }))
   }
 
   private startProgress(actions: Array<PlannedAction>) {
