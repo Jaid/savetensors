@@ -21,7 +21,7 @@
     "#root/*": "./*"
   },
   "scripts": {
-    "build": "NODE_ENV=production build_lib"
+    "build": "NODE_ENV=production build_lib --bundle"
   },
   "dependencies": {
     "@huggingface/hub": "^2.13.2",
