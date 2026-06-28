@@ -1,6 +1,6 @@
 {
   "name": "savetensors",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "gitless downloader for Hugging Face repositories",
   "funding": "https://github.com/sponsors/Jaid",
