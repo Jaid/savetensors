@@ -1,13 +1,15 @@
-import type {MergeRecord, MergeTarget} from './types.ts'
-
 import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 
-const safetensorsIndexSuffix = '.safetensors.index.json'
-const safetensorsShardPattern = /^(?<prefix>.+)-(?<part>\d{5})-of-(?<total>\d{5})\.safetensors$/u
-const metadataKey = '__metadata__'
-const copyBufferSize = 32 * 1024 * 1024
-type FileHandle = Awaited<ReturnType<typeof fs.promises.open>>
+export type MergeTarget = {
+  indexFile?: string
+  outputFile: string
+  shardFiles: Array<string>
+}
+
+export type MergeRecord = MergeTarget & {
+  durationMs: number
+}
 
 type SafetensorsTensorHeader = {
   data_offsets: [number, number]
@@ -30,6 +32,61 @@ type ParsedShard = {
   metadata?: Record<string, string>
   tensors: Array<ParsedTensor>
 }
+
+const safetensorsIndexSuffix = '.safetensors.index.json'
+const safetensorsShardPattern = /^(?<prefix>.+)-(?<part>\d{5})-of-(?<total>\d{5})\.safetensors$/u
+const metadataKey = '__metadata__'
+const copyBufferSize = 32 * 1024 * 1024
+const dtypeBits = {
+  BF16: 16,
+  BOOL: 8,
+  C64: 64,
+  F4: 4,
+  F6_E2M3: 6,
+  F6_E3M2: 6,
+  F8_E4M3: 8,
+  F8_E4M3FNUZ: 8,
+  F8_E5M2: 8,
+  F8_E5M2FNUZ: 8,
+  F8_E8M0: 8,
+  F16: 16,
+  F32: 32,
+  F64: 64,
+  I8: 8,
+  I16: 16,
+  I32: 32,
+  I64: 64,
+  U8: 8,
+  U16: 16,
+  U32: 32,
+  U64: 64,
+} as const
+const dtypeOrder = [
+  'BOOL',
+  'F4',
+  'F6_E2M3',
+  'F6_E3M2',
+  'U8',
+  'I8',
+  'F8_E5M2',
+  'F8_E4M3',
+  'F8_E8M0',
+  'F8_E4M3FNUZ',
+  'F8_E5M2FNUZ',
+  'I16',
+  'U16',
+  'F16',
+  'BF16',
+  'I32',
+  'U32',
+  'F32',
+  'C64',
+  'F64',
+  'I64',
+  'U64',
+] as const
+const dtypeRanks = new Map<string, number>(dtypeOrder.map((dtype, index) => [dtype, index]))
+type FileHandle = Awaited<ReturnType<typeof fs.promises.open>>
 
 const collectFiles = async (folder: string): Promise<Array<string>> => {
   if (!await fs.pathExists(folder)) {
@@ -122,11 +179,39 @@ const isTensorHeader = (value: unknown): value is SafetensorsTensorHeader => {
     && value.data_offsets.length === 2
     && value.data_offsets.every(offset => Number.isSafeInteger(offset) && offset >= 0)
 }
+const getDtypeBits = (dtype: string) => {
+  const bits = (dtypeBits as Partial<Record<string, number>>)[dtype]
+  if (bits === undefined) {
+    throw new Error(`Unsupported safetensors dtype: ${dtype}.`)
+  }
+  return bits
+}
+const getDtypeRank = (dtype: string) => {
+  const rank = dtypeRanks.get(dtype)
+  if (rank === undefined) {
+    throw new Error(`Unsupported safetensors dtype: ${dtype}.`)
+  }
+  return rank
+}
 const toSafeNumber = (value: bigint, label: string) => {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`${label} is too large for JavaScript’s safe integer range: ${value}.`)
   }
   return Number(value)
+}
+const getTensorDataLength = (dtype: string, shape: Array<number>, label: string) => {
+  const bits = BigInt(getDtypeBits(dtype))
+  const bitLength = shape.reduce((product, dimension) => product * BigInt(dimension), 1n) * bits
+  if (bitLength % 8n !== 0n) {
+    throw new Error(`Tensor ${label} is not byte-aligned.`)
+  }
+  return bitLength / 8n
+}
+const compareUtf8 = (left: string, right: string) => {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right))
+}
+const compareSafetensorsSaveOrder = (left: ParsedTensor, right: ParsedTensor) => {
+  return getDtypeRank(right.dtype) - getDtypeRank(left.dtype) || compareUtf8(left.name, right.name)
 }
 const readExactly = async (handle: FileHandle, buffer: Buffer, position: bigint, label: string) => {
   let readOffset = 0
@@ -170,7 +255,7 @@ const parseShard = async (file: string): Promise<ParsedShard> => {
     throw new Error(`Could not read safetensors shard ${file}: ${error instanceof Error ? error.message : String(error)}`)
   })
   const tensors: Array<ParsedTensor> = []
-  for (const [name, entry] of Object.entries(header)) {
+  for (const [name, entry] of Object.entries(header).toSorted(([left], [right]) => compareUtf8(left, right))) {
     if (name === metadataKey) {
       continue
     }
@@ -183,13 +268,18 @@ const parseShard = async (file: string): Promise<ParsedShard> => {
     }
     const start = BigInt(rawStart)
     const end = BigInt(rawEnd)
+    const dataLength = end - start
+    const expectedDataLength = getTensorDataLength(entry.dtype, entry.shape, `${name} in ${file}`)
+    if (dataLength !== expectedDataLength) {
+      throw new Error(`Tensor ${name} in ${file} has ${dataLength} data bytes, but its dtype and shape require ${expectedDataLength}.`)
+    }
     const absoluteStart = dataStart + start
     const absoluteEnd = dataStart + end
     if (absoluteEnd > fileSize) {
       throw new Error(`Tensor ${name} in ${file} exceeds the shard file size.`)
     }
     tensors.push({
-      dataLength: end - start,
+      dataLength,
       dataStart: absoluteStart,
       dtype: entry.dtype,
       file,
@@ -212,12 +302,12 @@ const makeMergedHeader = (tensors: Array<ParsedTensor>, metadata?: Record<string
   for (const tensor of tensors) {
     const nextOffset = offset + tensor.dataLength
     header[tensor.name] = {
+      dtype: tensor.dtype,
+      shape: tensor.shape,
       data_offsets: [
         toSafeNumber(offset, `${tensor.name} start offset`),
         toSafeNumber(nextOffset, `${tensor.name} end offset`),
       ],
-      dtype: tensor.dtype,
-      shape: tensor.shape,
     }
     offset = nextOffset
   }
@@ -296,8 +386,8 @@ export const mergeTarget = async (target: MergeTarget) => {
   for (const shardFile of target.shardFiles) {
     shards.push(await parseShard(shardFile))
   }
-  const metadata = shards.find(shard => shard.metadata)?.metadata
-  const tensors = shards.flatMap(shard => shard.tensors)
+  const metadata = shards.at(-1)?.metadata
+  const tensors = shards.flatMap(shard => shard.tensors).toSorted(compareSafetensorsSaveOrder)
   const tensorNames = new Set<string>
   for (const tensor of tensors) {
     if (tensorNames.has(tensor.name)) {

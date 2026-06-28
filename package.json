@@ -30,6 +30,7 @@
     "forward-slash-path": "^0.3.0",
     "fs-extra": "^11.3.5",
     "hasha": "^7.0.0",
+    "merge-safetensors": "workspace:*",
     "picomatch": "^4.0.4"
   },
   "devDependencies": {
@@ -40,5 +41,8 @@
     "eslint-config-jaid": "^26.0.0",
     "tsconfig-jaid-bun": "^15.2.0",
     "typescript": "^6.0.3"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

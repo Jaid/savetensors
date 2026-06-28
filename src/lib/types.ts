@@ -1,4 +1,7 @@
 import type {ListFileEntry, RepoDesignation, RepoType} from '@huggingface/hub'
+import type {MergeTarget} from 'merge-safetensors'
+
+export type {MergeRecord, MergeTarget} from 'merge-safetensors'
 
 export type FilterMatchKind = 'default' | 'omitFile' | 'omitFolder' | 'omitPattern' | 'omitStem' | 'omitSuffix' | 'onlyFile' | 'onlyFolder' | 'onlyPattern' | 'onlyStem' | 'onlySuffix'
 export type OverwriteStrategy = 'error' | 'keep' | 'mismatch' | 'skip' | 'wipe'
@@ -87,16 +90,6 @@ export type DownloadRecord = {
   size: number
   status: 'downloaded' | 'error' | 'merged' | 'skipped'
   targetPath: string
-}
-
-export type MergeTarget = {
-  indexFile?: string
-  outputFile: string
-  shardFiles: Array<string>
-}
-
-export type MergeRecord = MergeTarget & {
-  durationMs: number
 }
 
 export type DumpOutput = {

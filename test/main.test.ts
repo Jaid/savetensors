@@ -259,6 +259,8 @@ test('mergeTarget merges safetensors shards without materializing tensors', asyn
     })
     await writeFakeSafetensors(secondShard, {
       gamma: Buffer.from('hijkl'),
+    }, {
+      format: 'pt',
     })
     await fs.outputJson(indexFile, {
       weight_map: {

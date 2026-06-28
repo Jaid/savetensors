@@ -1,0 +1,25 @@
+{
+  "name": "merge-safetensors",
+  "version": "0.1.0",
+  "type": "module",
+  "funding": "https://github.com/sponsors/Jaid",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jaid/savetensors.git"
+  },
+  "main": "src/main.ts",
+  "exports": {
+    ".": {
+      "types": "./src/main.ts",
+      "default": "./src/main.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test --max-concurrency 1 ./test"
+  },
+  "dependencies": {
+    "forward-slash-path": "^0.3.0",
+    "fs-extra": "^11.3.5"
+  }
+}

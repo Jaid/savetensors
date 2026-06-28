@@ -10,10 +10,10 @@ import chalk from 'chalk'
 import * as pathUtil from 'forward-slash-path'
 import fs from 'fs-extra'
 import {hashFile} from 'hasha'
+import {findMergeTargets, mergeSplits} from 'merge-safetensors'
 
 import {filterEntries} from './lib/filter.ts'
 import {formatBytes, formatDuration, renderTemplate} from './lib/format.ts'
-import {findMergeTargets, mergeSplits} from './lib/mergeSplits.ts'
 import {parseRepo, repoDisplayName} from './lib/parseRepo.ts'
 
 const sourceDomain = 'huggingface.co'

@@ -11,6 +11,7 @@
         "forward-slash-path": "^0.3.0",
         "fs-extra": "^11.3.5",
         "hasha": "^7.0.0",
+        "merge-safetensors": "workspace:*",
         "picomatch": "^4.0.4",
       },
       "devDependencies": {
@@ -21,6 +22,14 @@
         "eslint-config-jaid": "^26.0.0",
         "tsconfig-jaid-bun": "^15.2.0",
         "typescript": "^6.0.3",
+      },
+    },
+    "packages/merge-safetensors": {
+      "name": "merge-safetensors",
+      "version": "0.1.0",
+      "dependencies": {
+        "forward-slash-path": "^0.3.0",
+        "fs-extra": "^11.3.5",
       },
     },
   },
@@ -364,6 +373,8 @@
     "locate-path": ["locate-path@6.0.0", "", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
     "lodash-es": ["lodash-es@4.18.1", "", {}, "sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A=="],
+
+    "merge-safetensors": ["merge-safetensors@workspace:packages/merge-safetensors"],
 
     "minimatch": ["minimatch@10.2.5", "", { "dependencies": { "brace-expansion": "^5.0.5" } }, "sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg=="],
 
