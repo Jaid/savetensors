@@ -15,18 +15,13 @@
       "default": "./src/main.ts"
     }
   },
-  "bin": {
-    "savetensors": "./src/cli.ts",
-    "hf-grab": "./src/cli.ts"
-  },
+  "bin": "./src/cli.ts",
   "imports": {
     "#src/*": "./src/*",
     "#root/*": "./*"
   },
   "scripts": {
-    "lint": "bunx --bun eslint .",
-    "test": "bun test --max-concurrency 1 ./test",
-    "typecheck": "tsc --noEmit --pretty false"
+    "build": "NODE_ENV=production build_lib"
   },
   "dependencies": {
     "@huggingface/hub": "^2.13.2",
